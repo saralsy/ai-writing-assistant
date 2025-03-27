@@ -12,6 +12,9 @@ import {
   ThumbsUp,
   ThumbsDown,
   Command,
+  Thermometer,
+  Palette,
+  LineChart,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -32,6 +35,11 @@ import AIStatusIndicator from "./ai-status-indicator";
 import { useCompletion } from "@ai-sdk/react";
 import { v4 as uuidv4 } from "uuid";
 import GhostTextEditor from "./ghost-text";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export default function WritingEditor() {
   const [content, setContent] = useState<string>("");
@@ -44,10 +52,15 @@ export default function WritingEditor() {
   const [lineSpacing, setLineSpacing] = useState(1.6);
   const [font, setFont] = useState("inter");
   const [savedStatus, setSavedStatus] = useState("Saved");
+  const [temperature, setTemperature] = useState(0.7);
+  const [backgroundColor, setBackgroundColor] = useState("#ffffff");
+  const [showBackgroundLines, setShowBackgroundLines] = useState(false);
+  const [lineSpacing_background, setLineSpacingBackground] = useState(24);
+  const [lineColor, setLineColor] = useState("#f0f0f0");
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const { theme } = useTheme();
 
-  // Update the AI completion hook
+  // Update the AI completion hook with temperature
   const {
     complete,
     completion,
@@ -58,6 +71,9 @@ export default function WritingEditor() {
   } = useCompletion({
     api: "/api/ai",
     streamProtocol: "text",
+    body: {
+      temperature: temperature,
+    },
     onResponse: (response) => {
       console.log("AI Response:", response);
     },
@@ -103,22 +119,21 @@ export default function WritingEditor() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [suggestion]);
 
-  // Update the getAISuggestion function
+  // Update the getAISuggestion function with temperature
   const getAISuggestion = async () => {
     setIsProcessing(true);
 
     try {
-      // Get cursor position from the editor (can be referenced via a ref)
-      let currentText = content;
+      // Get cursor position
       let cursorPos = editorRef.current?.selectionStart || content.length;
 
       // Use the text up to the cursor to generate suggestions
-      const contextText = currentText.substring(0, cursorPos);
+      const contextText = content.substring(0, cursorPos);
 
       // Send the context to the AI, but request only the new text as a continuation
       const prompt = `Continue the following text with a suggestion. Return ONLY the new content, not the original text: "${contextText}"`;
 
-      // Here we pass the prompt or modify your API to handle this requirement
+      // Here we pass the prompt with the adjusted temperature
       const result = await complete(prompt);
 
       // Only set the suggestion if we got a result
@@ -168,7 +183,7 @@ export default function WritingEditor() {
     }
   };
 
-  // Update the handleCommand function
+  // Update the handleCommand function with temperature
   const handleCommand = async (command: string) => {
     setShowCommandPalette(false);
     setIsProcessing(true);
@@ -184,6 +199,7 @@ export default function WritingEditor() {
         },
         body: JSON.stringify({
           messages: [{ role: "user", content: prompt }],
+          temperature: temperature,
         }),
       });
 
@@ -226,11 +242,26 @@ export default function WritingEditor() {
     setSuggestion("");
   };
 
+  // Function to generate CSS for background lines
+  const getBackgroundLinesCSS = () => {
+    if (!showBackgroundLines) return {};
+
+    return {
+      backgroundImage: `linear-gradient(${lineColor} 1px, transparent 1px)`,
+      backgroundSize: `100% ${lineSpacing_background}px`,
+      backgroundPosition: "0 0",
+    };
+  };
+
   return (
-    <div className="flex flex-col h-screen">
+    <div
+      className="flex flex-col h-screen w-full max-w-full overflow-hidden"
+      style={{ maxWidth: "100%" }}
+    >
       {/* Top toolbar */}
       <div className="border-b p-2 flex justify-between items-center">
         <div className="flex items-center gap-2">
+          <SidebarTrigger />
           <FileText className="h-5 w-5 text-muted-foreground" />
           <span className="text-sm font-medium">Untitled Document</span>
           <span className="text-xs text-muted-foreground ml-2">
@@ -287,52 +318,182 @@ export default function WritingEditor() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80">
               <div className="p-4 space-y-4">
-                <h4 className="font-medium">Editor Settings</h4>
+                <Tabs defaultValue="editor">
+                  <TabsList className="w-full">
+                    <TabsTrigger value="editor" className="flex-1">
+                      Editor
+                    </TabsTrigger>
+                    <TabsTrigger value="ai" className="flex-1">
+                      AI
+                    </TabsTrigger>
+                    <TabsTrigger value="appearance" className="flex-1">
+                      Appearance
+                    </TabsTrigger>
+                  </TabsList>
 
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-sm">Font</span>
-                    <Select value={font} onValueChange={setFont}>
-                      <SelectTrigger className="w-32 h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="inter">Inter</SelectItem>
-                        <SelectItem value="georgia">Georgia</SelectItem>
-                        <SelectItem value="courier">Courier</SelectItem>
-                        <SelectItem value="helvetica">Helvetica</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <TabsContent value="editor" className="mt-4 space-y-4">
+                    <h4 className="font-medium">Editor Settings</h4>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm">Font</span>
+                        <Select value={font} onValueChange={setFont}>
+                          <SelectTrigger className="w-32 h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="inter">Inter</SelectItem>
+                            <SelectItem value="georgia">Georgia</SelectItem>
+                            <SelectItem value="courier">Courier</SelectItem>
+                            <SelectItem value="helvetica">Helvetica</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                  <div className="space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-sm">Font Size: {fontSize}px</span>
+                      <div className="space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-sm">
+                            Font Size: {fontSize}px
+                          </span>
+                        </div>
+                        <Slider
+                          value={[fontSize]}
+                          min={12}
+                          max={24}
+                          step={1}
+                          onValueChange={(value) => setFontSize(value[0])}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-sm">
+                            Line Spacing: {lineSpacing.toFixed(1)}
+                          </span>
+                        </div>
+                        <Slider
+                          value={[lineSpacing]}
+                          min={1.0}
+                          max={2.5}
+                          step={0.1}
+                          onValueChange={(value) => setLineSpacing(value[0])}
+                        />
+                      </div>
                     </div>
-                    <Slider
-                      value={[fontSize]}
-                      min={12}
-                      max={24}
-                      step={1}
-                      onValueChange={(value) => setFontSize(value[0])}
-                    />
-                  </div>
+                  </TabsContent>
 
-                  <div className="space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-sm">
-                        Line Spacing: {lineSpacing.toFixed(1)}
-                      </span>
+                  <TabsContent value="ai" className="mt-4 space-y-4">
+                    <h4 className="font-medium">AI Settings</h4>
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center">
+                            <Thermometer className="h-4 w-4 mr-2" />
+                            <span className="text-sm">
+                              Temperature: {temperature.toFixed(1)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs">Precise</span>
+                          <Slider
+                            value={[temperature]}
+                            min={0.1}
+                            max={1.0}
+                            step={0.1}
+                            className="flex-1"
+                            onValueChange={(value) => setTemperature(value[0])}
+                          />
+                          <span className="text-xs">Creative</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Lower values create more deterministic suggestions,
+                          higher values increase creativity
+                        </p>
+                      </div>
                     </div>
-                    <Slider
-                      value={[lineSpacing]}
-                      min={1.0}
-                      max={2.5}
-                      step={0.1}
-                      onValueChange={(value) => setLineSpacing(value[0])}
-                    />
-                  </div>
-                </div>
+                  </TabsContent>
+
+                  <TabsContent value="appearance" className="mt-4 space-y-4">
+                    <h4 className="font-medium">Appearance Settings</h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="bg-color" className="text-sm">
+                          Background Color
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            id="bg-color"
+                            type="color"
+                            value={backgroundColor}
+                            onChange={(e) => setBackgroundColor(e.target.value)}
+                            className="w-10 h-8 p-0 border cursor-pointer"
+                          />
+                          <Input
+                            value={backgroundColor}
+                            onChange={(e) => setBackgroundColor(e.target.value)}
+                            className="w-24 h-8 text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <Label
+                          htmlFor="bg-lines"
+                          className="text-sm flex items-center"
+                        >
+                          <LineChart className="h-4 w-4 mr-2" />
+                          Background Lines
+                        </Label>
+                        <Switch
+                          id="bg-lines"
+                          checked={showBackgroundLines}
+                          onCheckedChange={setShowBackgroundLines}
+                        />
+                      </div>
+
+                      {showBackgroundLines && (
+                        <>
+                          <div className="space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-sm">
+                                Line Spacing: {lineSpacing_background}px
+                              </span>
+                            </div>
+                            <Slider
+                              value={[lineSpacing_background]}
+                              min={16}
+                              max={48}
+                              step={2}
+                              onValueChange={(value) =>
+                                setLineSpacingBackground(value[0])
+                              }
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="line-color" className="text-sm">
+                              Line Color
+                            </Label>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                id="line-color"
+                                type="color"
+                                value={lineColor}
+                                onChange={(e) => setLineColor(e.target.value)}
+                                className="w-10 h-8 p-0 border cursor-pointer"
+                              />
+                              <Input
+                                value={lineColor}
+                                onChange={(e) => setLineColor(e.target.value)}
+                                className="w-24 h-8 text-xs"
+                              />
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -340,7 +501,7 @@ export default function WritingEditor() {
       </div>
 
       {/* Main content area */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative w-full max-w-full">
         {/* Document outline sidebar */}
         {showOutline && (
           <div className="w-64 border-r p-4 overflow-y-auto">
@@ -350,65 +511,95 @@ export default function WritingEditor() {
 
         {/* Editor area */}
         <div
-          className={cn("flex-1 flex", splitScreen ? "flex-row" : "flex-col")}
+          className={cn(
+            "flex-1 flex overflow-hidden max-w-full",
+            splitScreen ? "flex-row" : "flex-col"
+          )}
         >
-          {/* Main editor */}
-          {/* <div className="flex-1 relative overflow-auto bg-background">
-            <div className="relative min-h-full">
+          {/* Main editor area with direct textarea implementation */}
+          <div
+            className="flex-1 relative overflow-hidden"
+            style={{ backgroundColor }}
+          >
+            <div
+              className="relative min-h-full w-full max-w-full"
+              style={getBackgroundLinesCSS()}
+            >
               <div className="absolute top-0 left-0 right-0 bottom-0 p-8">
-                <div className="relative">
+                <div className="relative w-full h-full">
                   <textarea
                     ref={editorRef}
                     value={content}
                     onChange={handleContentChange}
                     className={cn(
-                      "w-full h-full min-h-[calc(100vh-10rem)] resize-none bg-transparent outline-none",
+                      "w-full h-full min-h-[calc(100vh-10rem)] resize-none bg-transparent outline-none overflow-hidden",
                       `font-${font}`
                     )}
                     style={{
                       fontSize: `${fontSize}px`,
                       lineHeight: lineSpacing,
+                      overflowX: "hidden",
+                      boxSizing: "border-box",
                     }}
                     placeholder="Start writing..."
                   />
 
                   {/* Ghost text suggestion */}
-          {/* {suggestion && !isProcessing && (
+                  {suggestion && !isProcessing && (
                     <div
-                      className={cn(
-                        "absolute top-0 left-0 whitespace-pre-wrap break-words pointer-events-none text-muted-foreground opacity-60",
-                        `font-${font}`
-                      )}
+                      className="absolute top-0 left-0 pointer-events-none"
                       style={{
-                        fontSize: `${fontSize}px`,
-                        lineHeight: lineSpacing,
-                        padding: "1rem",
-                        visibility: suggestion ? "visible" : "hidden",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
                       }}
                     >
-                      {suggestion}
+                      <span
+                        className="invisible"
+                        style={{
+                          fontSize: `${fontSize}px`,
+                          lineHeight: lineSpacing,
+                          fontFamily:
+                            font === "inter"
+                              ? "Inter, sans-serif"
+                              : font === "georgia"
+                              ? "Georgia, serif"
+                              : font === "courier"
+                              ? "Courier, monospace"
+                              : "Helvetica, sans-serif",
+                        }}
+                      >
+                        {content.substring(
+                          0,
+                          editorRef.current?.selectionStart || content.length
+                        )}
+                      </span>
+                      <span
+                        className="text-muted-foreground opacity-60"
+                        style={{
+                          fontSize: `${fontSize}px`,
+                          lineHeight: lineSpacing,
+                          fontFamily:
+                            font === "inter"
+                              ? "Inter, sans-serif"
+                              : font === "georgia"
+                              ? "Georgia, serif"
+                              : font === "courier"
+                              ? "Courier, monospace"
+                              : "Helvetica, sans-serif",
+                        }}
+                      >
+                        {suggestion}
+                      </span>
                     </div>
                   )}
                 </div>
               </div>
-            </div> */}
-          {/* </div> */}
-
-          <GhostTextEditor
-            content={content}
-            suggestion={suggestion}
-            isProcessing={isProcessing}
-            onChange={handleContentChange}
-            onAcceptSuggestion={acceptSuggestion}
-            fontSize={fontSize}
-            lineSpacing={lineSpacing}
-            font={font}
-            placeholder="Start writing..."
-          />
+            </div>
+          </div>
 
           {/* Split screen reference panel */}
           {splitScreen && (
-            <div className="flex-1 border-l p-4 overflow-auto">
+            <div className="w-2/5 border-l p-4 overflow-auto">
               <h3 className="font-medium mb-2">Research Panel</h3>
               <p className="text-sm text-muted-foreground">
                 Use this panel to reference research materials while writing.
