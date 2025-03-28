@@ -5,7 +5,7 @@ export const maxDuration = 30;
 
 export async function POST(req: Request) {
   try {
-    const { prompt } = await req.json();
+    const { prompt, writingType, temperature } = await req.json();
 
     if (!prompt) {
       return new Response("Prompt is required", { status: 400 });
@@ -20,15 +20,14 @@ export async function POST(req: Request) {
       messages: [
         {
           role: "system",
-          content:
-            "You are a writing assistant. When asked to continue text, provide only the new suggested text, NOT the original input. Keep suggestions concise and relevant to the context. Maintain consistent formatting with the input text - if the input ends without a space, begin your response without a space; if the input ends with a space, begin your response with the next word. If the input ends with a comma, period, or other punctuation, respect the appropriate spacing that would follow.",
+          content: `You are a writing assistant. When asked to continue text, provide only the new suggested text, NOT the original input. Keep suggestions concise and relevant to the context. Maintain consistent formatting with the input text - if the input ends without a space, begin your response without a space; if the input ends with a space, begin your response with the next word. If the input ends with a comma, period, or other punctuation, respect the appropriate spacing that would follow. You are writing in the style of ${writingType}.`,
         },
         {
           role: "user",
           content: formattedPrompt,
         },
       ],
-      temperature: 0.7,
+      temperature: temperature || 0.7,
       maxTokens: 150,
     });
 
