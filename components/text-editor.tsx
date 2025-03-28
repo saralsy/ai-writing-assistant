@@ -13,6 +13,13 @@ interface TextEditorProps {
   lineSpacing_background: number;
   lineColor: string;
   handleContentChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  isEnhancing: boolean;
+  applyVersion: (versionContent: string) => void;
+  compareWithCurrentVersion: (
+    versionContent: string,
+    description: string
+  ) => void;
+  aiEnabled: boolean;
 }
 
 export default function TextEditor({
@@ -27,6 +34,10 @@ export default function TextEditor({
   lineSpacing_background,
   lineColor,
   handleContentChange,
+  isEnhancing,
+  applyVersion,
+  compareWithCurrentVersion,
+  aiEnabled,
 }: TextEditorProps) {
   const editorRef = useRef<HTMLTextAreaElement>(null);
 
@@ -65,26 +76,36 @@ export default function TextEditor({
       >
         <div className="absolute top-0 left-0 right-0 bottom-0 p-8">
           <div className="relative w-full h-full">
-            <textarea
-              ref={editorRef}
-              value={content}
-              onChange={handleContentChange}
+            {/* Text area wrapper */}
+            <div
               className={cn(
-                "w-full h-full min-h-[calc(100vh-10rem)] resize-none bg-transparent outline-none overflow-hidden",
-                `font-${font}`
+                "relative w-full h-full",
+                isEnhancing && "shimmer-container"
               )}
-              style={{
-                fontSize: `${fontSize}px`,
-                lineHeight: lineSpacing,
-                overflowX: "hidden",
-                boxSizing: "border-box",
-                fontFamily: getFontFamily(),
-              }}
-              placeholder="Start writing..."
-            />
+            >
+              <textarea
+                ref={editorRef}
+                value={content}
+                onChange={handleContentChange}
+                className={cn(
+                  "w-full h-full min-h-[calc(100vh-10rem)] resize-none bg-transparent outline-none overflow-hidden",
+                  `font-${font}`,
+                  isEnhancing && "mono-shimmer-text"
+                )}
+                style={{
+                  fontSize: `${fontSize}px`,
+                  lineHeight: lineSpacing,
+                  overflowX: "hidden",
+                  boxSizing: "border-box",
+                  fontFamily: getFontFamily(),
+                }}
+                placeholder="Start writing..."
+                disabled={isEnhancing}
+              />
+            </div>
 
             {/* Ghost text suggestion */}
-            {suggestion && !isProcessing && (
+            {suggestion && !isProcessing && aiEnabled && !isEnhancing && (
               <div
                 className="absolute top-0 left-0 pointer-events-none"
                 style={{
@@ -120,6 +141,33 @@ export default function TextEditor({
           </div>
         </div>
       </div>
+
+      {/* Add global styles for the shimmer effect */}
+      <style jsx global>{`
+        .mono-shimmer-text {
+          background-image: linear-gradient(
+            90deg,
+            rgba(24, 24, 27, 0.8) 0%,
+            rgba(255, 255, 255, 0.9) 25%,
+            rgba(161, 161, 170, 0.7) 50%,
+            rgba(24, 24, 27, 0.8) 100%
+          );
+          background-size: 200% 100%;
+          color: transparent;
+          -webkit-background-clip: text;
+          background-clip: text;
+          animation: mono-shimmer 3s infinite ease-in-out;
+        }
+
+        @keyframes mono-shimmer {
+          0% {
+            background-position: 100% 0;
+          }
+          100% {
+            background-position: -100% 0;
+          }
+        }
+      `}</style>
     </div>
   );
 }

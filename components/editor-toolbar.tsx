@@ -1,11 +1,25 @@
 import { Button } from "@/components/ui/button";
-import { FileText, Split, Command, Settings } from "lucide-react";
+import {
+  FileText,
+  Split,
+  Command,
+  Settings,
+  Wand2,
+  Sparkles,
+  EyeOff,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import AIStatusIndicator from "./ai-status-indicator";
 import WritingTypeSelector from "./writing-type-selector";
@@ -40,6 +54,15 @@ interface EditorToolbarProps {
   setLineSpacingBackground: (spacing: number) => void;
   lineColor: string;
   setLineColor: (color: string) => void;
+  isEnhancing: boolean;
+  applyVersion: (versionContent: string) => void;
+  compareWithCurrentVersion: (
+    versionContent: string,
+    description: string
+  ) => void;
+  handleEnhanceText: () => void;
+  aiEnabled: boolean;
+  setAiEnabled: (enabled: boolean) => void;
 }
 
 export default function EditorToolbar({
@@ -71,6 +94,12 @@ export default function EditorToolbar({
   setLineSpacingBackground,
   lineColor,
   setLineColor,
+  isEnhancing,
+  applyVersion,
+  compareWithCurrentVersion,
+  handleEnhanceText,
+  aiEnabled,
+  setAiEnabled,
 }: EditorToolbarProps) {
   return (
     <div className="border-b p-2 flex justify-between items-center">
@@ -85,6 +114,49 @@ export default function EditorToolbar({
 
       <div className="flex items-center gap-2">
         <AIStatusIndicator isProcessing={isProcessing} />
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={isEnhancing}
+                onClick={handleEnhanceText}
+                className={cn(isEnhancing && "animate-pulse")}
+              >
+                <Wand2
+                  className={cn(
+                    "h-4 w-4",
+                    isEnhancing && "animate-spin text-primary"
+                  )}
+                />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Enhance writing with AI</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setAiEnabled(!aiEnabled)}
+              >
+                {aiEnabled ? (
+                  <Sparkles className="h-4 w-4 text-primary" />
+                ) : (
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {aiEnabled ? "Disable AI suggestions" : "Enable AI suggestions"}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
         <WritingTypeSelector
           selectedType={writingType}

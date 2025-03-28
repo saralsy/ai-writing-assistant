@@ -9,7 +9,11 @@ import { useCompletion } from "@ai-sdk/react";
 import EditorToolbar from "./editor-toolbar";
 import TextEditor from "./text-editor";
 import SuggestionFeedback from "./suggestion-feedback";
-import { getAISuggestion, executeAICommand } from "@/lib/ai-service";
+import {
+  getAISuggestion,
+  executeAICommand,
+  enhanceText,
+} from "@/lib/ai-service";
 
 export default function WritingEditor() {
   // Document state
@@ -32,12 +36,30 @@ export default function WritingEditor() {
   const [temperature, setTemperature] = useState(0.7);
   const [writingType, setWritingType] = useState("general");
   const [customInstructions, setCustomInstructions] = useState("");
-
+  const [aiEnabled, setAiEnabled] = useState(true);
   // Appearance settings
   const [backgroundColor, setBackgroundColor] = useState("#ffffff");
   const [showBackgroundLines, setShowBackgroundLines] = useState(false);
   const [lineSpacing_background, setLineSpacingBackground] = useState(24);
   const [lineColor, setLineColor] = useState("#f0f0f0");
+
+  // Version history
+  const [versionHistory, setVersionHistory] = useState<
+    {
+      id: string;
+      content: string;
+      timestamp: Date;
+      description: string;
+    }[]
+  >([]);
+  const [currentVersion, setCurrentVersion] = useState<string>("");
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [compareVersions, setCompareVersions] = useState<{
+    before: string;
+    after: string;
+    description: string;
+  } | null>(null);
+  const [showVersionCompare, setShowVersionCompare] = useState(false);
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const { theme } = useTheme();
@@ -202,6 +224,76 @@ export default function WritingEditor() {
     setSuggestion("");
   };
 
+  // Save current version to history
+  const saveToVersionHistory = (description: string) => {
+    const newVersion = {
+      id: Date.now().toString(),
+      content: content,
+      timestamp: new Date(),
+      description,
+    };
+    setVersionHistory((prev) => [newVersion, ...prev]);
+  };
+
+  // Function to enhance the text, without AI suggestions
+  const handleEnhanceText = async () => {
+    if (!content.trim()) return;
+
+    // Save current version before enhancement
+    saveToVersionHistory("Before AI enhancement");
+
+    setIsEnhancing(true);
+    setIsProcessing(true);
+
+    try {
+      const originalContent = content;
+      const enhancedContent = await enhanceText(
+        content,
+        writingType,
+        customInstructions
+      );
+
+      // Set up comparison
+      setCompareVersions({
+        before: originalContent,
+        after: enhancedContent,
+        description: "AI Enhancement",
+      });
+
+      // Show comparison dialog
+      setShowVersionCompare(true);
+
+      // Update content
+      setContent(enhancedContent);
+
+      // Save to version history
+      saveToVersionHistory("After AI enhancement");
+    } catch (error) {
+      console.error("Error enhancing text:", error);
+      alert("Failed to enhance text. Please try again.");
+    } finally {
+      setIsEnhancing(false);
+      setIsProcessing(false);
+    }
+  };
+
+  const applyVersion = (versionContent: string) => {
+    saveToVersionHistory("Before reverting to previous version");
+    setContent(versionContent);
+  };
+
+  const compareWithCurrentVersion = (
+    versionContent: string,
+    description: string
+  ) => {
+    setCompareVersions({
+      before: versionContent,
+      after: content,
+      description,
+    });
+    setShowVersionCompare(true);
+  };
+
   return (
     <div
       className="flex flex-col h-screen w-full max-w-full overflow-hidden"
@@ -236,6 +328,12 @@ export default function WritingEditor() {
         setLineSpacingBackground={setLineSpacingBackground}
         lineColor={lineColor}
         setLineColor={setLineColor}
+        isEnhancing={isEnhancing}
+        applyVersion={applyVersion}
+        compareWithCurrentVersion={compareWithCurrentVersion}
+        handleEnhanceText={handleEnhanceText}
+        aiEnabled={aiEnabled}
+        setAiEnabled={setAiEnabled}
       />
 
       {/* Main content area */}
@@ -267,6 +365,10 @@ export default function WritingEditor() {
             lineSpacing_background={lineSpacing_background}
             lineColor={lineColor}
             handleContentChange={handleContentChange}
+            isEnhancing={isEnhancing}
+            applyVersion={applyVersion}
+            compareWithCurrentVersion={compareWithCurrentVersion}
+            aiEnabled={aiEnabled}
           />
 
           {/* Split screen reference panel */}
@@ -284,11 +386,13 @@ export default function WritingEditor() {
       </div>
 
       {/* AI suggestion feedback */}
-      <SuggestionFeedback
-        suggestion={suggestion}
-        setSuggestion={setSuggestion}
-        acceptSuggestion={acceptSuggestion}
-      />
+      {suggestion && aiEnabled && (
+        <SuggestionFeedback
+          suggestion={suggestion}
+          setSuggestion={setSuggestion}
+          acceptSuggestion={acceptSuggestion}
+        />
+      )}
 
       {/* Command palette */}
       {showCommandPalette && (

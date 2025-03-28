@@ -1,29 +1,29 @@
+import { anthropic } from "@ai-sdk/anthropic";
+
 interface AIServiceOptions {
   temperature: number;
   writingType: string;
 }
 
 export async function getAISuggestion(
-  contextText: string,
-  options: AIServiceOptions
+  text: string,
+  options: { temperature: number; writingType: string }
 ) {
   try {
-    const prompt = `Continue the following text with a suggestion. Return ONLY the new content, not the original text: "${contextText}"`;
-
     const response = await fetch("/api/ai", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        prompt,
+        prompt: text,
         temperature: options.temperature,
         writingType: options.writingType,
       }),
     });
 
     if (!response.ok) {
-      throw new Error("Failed to get AI suggestion");
+      throw new Error(`API error: ${response.status}`);
     }
 
     const data = await response.text();
@@ -36,33 +36,63 @@ export async function getAISuggestion(
 
 export async function executeAICommand(
   command: string,
-  content: string,
+  text: string,
   customInstructions: string,
-  options: AIServiceOptions
+  options: { temperature: number; writingType: string }
 ) {
   try {
-    const prompt = `${command} the following text: "${content} ${customInstructions}"`;
-
-    const response = await fetch("/api/ai", {
+    const response = await fetch("/api/command", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        prompt,
+        command,
+        text,
+        customInstructions,
         temperature: options.temperature,
         writingType: options.writingType,
       }),
     });
 
     if (!response.ok) {
-      throw new Error("Failed to process command");
+      throw new Error(`API error: ${response.status}`);
     }
 
-    const result = await response.json();
-    return result.text || result;
+    const data = await response.text();
+    return data;
   } catch (error) {
-    console.error("Error processing command:", error);
+    console.error("Error executing AI command:", error);
+    throw error;
+  }
+}
+
+export async function enhanceText(
+  text: string,
+  writingType: string,
+  customInstructions: string
+) {
+  try {
+    const response = await fetch("/api/enhance", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text,
+        writingType,
+        customInstructions,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const enhancedText = await response.text();
+    return enhancedText;
+  } catch (error) {
+    console.error("Error enhancing text:", error);
     throw error;
   }
 }
