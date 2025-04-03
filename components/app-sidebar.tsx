@@ -36,15 +36,36 @@ import {
 import { getAllDrafts, deleteDraft, saveDraft } from "@/lib/storage";
 import type { Draft } from "@/lib/types";
 import { formatDistanceToNow } from "@/lib/utils";
+import DocumentList from "./document-list";
 
+interface SavedDocument {
+  id: string;
+  title: string;
+  content: string;
+  lastModified: number;
+}
 interface DraftSidebarProps {
   selectedDraft: Draft | null;
   setSelectedDraft: (draft: Draft | null) => void;
+  savedDocuments: SavedDocument[];
+  currentDocumentId: string;
+  onLoadDocument: (id: string) => void;
+  onCreateDocument: () => void;
+  onDeleteDocument: (id: string) => void;
+  setSavedDocuments: (docs: SavedDocument[]) => void;
+  setDocumentId: (id: string) => void;
 }
 
 export function DraftSidebar({
   selectedDraft,
   setSelectedDraft,
+  savedDocuments = [],
+  currentDocumentId = "",
+  onLoadDocument = () => {},
+  onCreateDocument = () => {},
+  onDeleteDocument = () => {},
+  setSavedDocuments = () => {},
+  setDocumentId = () => {},
 }: DraftSidebarProps) {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -145,87 +166,19 @@ export function DraftSidebar({
             New Draft
           </Button>
         </div>
-        <div className="px-2 pb-2">
-          <div className="relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <SidebarInput
-              placeholder="Search drafts..."
-              className="pl-8"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-        </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <div className="flex items-center justify-between px-2 py-1">
-            <SidebarGroupLabel>
-              {filteredDrafts.length}{" "}
-              {filteredDrafts.length === 1 ? "Draft" : "Drafts"}
-            </SidebarGroupLabel>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                  {sortOrder === "newest" ? (
-                    <SortDesc className="h-4 w-4" />
-                  ) : sortOrder === "oldest" ? (
-                    <SortAsc className="h-4 w-4" />
-                  ) : (
-                    <SortAsc className="h-4 w-4" />
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setSortOrder("newest")}>
-                  Newest First
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortOrder("oldest")}>
-                  Oldest First
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortOrder("alphabetical")}>
-                  Alphabetical
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {sortedDrafts.length > 0 ? (
-                sortedDrafts.map((draft) => (
-                  <SidebarMenuItem key={draft.id}>
-                    <SidebarMenuButton
-                      onClick={() => handleSelectDraft(draft)}
-                      isActive={selectedDraft?.id === draft.id}
-                      tooltip={draft.title}
-                    >
-                      <FileText className="h-4 w-4 shrink-0" />
-                      <div className="flex flex-col overflow-hidden">
-                        <span className="truncate">{draft.title}</span>
-                        <span className="text-xs text-muted-foreground flex items-center">
-                          <Clock className="h-3 w-3 mr-1 inline" />
-                          {formatDistanceToNow(new Date(draft.updatedAt))}
-                        </span>
-                      </div>
-                    </SidebarMenuButton>
-                    <SidebarMenuAction
-                      onClick={() => handleDeleteDraft(draft.id)}
-                      showOnHover
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </SidebarMenuAction>
-                  </SidebarMenuItem>
-                ))
-              ) : (
-                <div className="px-4 py-3 text-sm text-muted-foreground">
-                  {searchQuery
-                    ? "No drafts match your search"
-                    : "No drafts yet"}
-                </div>
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <div className="flex-1 overflow-hidden">
+          <DocumentList
+            documents={savedDocuments}
+            currentDocumentId={currentDocumentId}
+            onLoadDocument={onLoadDocument}
+            onCreateDocument={onCreateDocument}
+            onDeleteDocument={onDeleteDocument}
+            setSavedDocuments={setSavedDocuments}
+            setDocumentId={setDocumentId}
+          />
+        </div>
       </SidebarContent>
       <SidebarFooter>
         <div className="p-2 text-xs text-muted-foreground">

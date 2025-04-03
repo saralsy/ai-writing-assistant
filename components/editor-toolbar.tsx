@@ -7,11 +7,17 @@ import {
   Wand2,
   Sparkles,
   EyeOff,
+  FileIcon,
+  ChevronDownIcon,
+  PlusIcon,
+  TrashIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
@@ -24,6 +30,7 @@ import { cn } from "@/lib/utils";
 import AIStatusIndicator from "./ai-status-indicator";
 import WritingTypeSelector from "./writing-type-selector";
 import EditorSettings from "./editor-settings";
+import { useState, useRef } from "react";
 
 interface EditorToolbarProps {
   savedStatus: string;
@@ -63,6 +70,24 @@ interface EditorToolbarProps {
   handleEnhanceText: () => void;
   aiEnabled: boolean;
   setAiEnabled: (enabled: boolean) => void;
+  documentTitle: string;
+  setDocumentTitle: (title: string) => void;
+  savedDocuments: SavedDocument[];
+  loadDocument: (id: string) => void;
+  createNewDocument: () => void;
+  deleteDocument: (id: string) => void;
+  currentDocumentId: string;
+  onSaveDocument: (doc: SavedDocument) => void;
+  onLoadDocument: (id: string) => void;
+  onCreateDocument: () => void;
+  onDeleteDocument: (id: string) => void;
+}
+
+interface SavedDocument {
+  id: string;
+  title: string;
+  content: string;
+  lastModified: number;
 }
 
 export default function EditorToolbar({
@@ -100,13 +125,63 @@ export default function EditorToolbar({
   handleEnhanceText,
   aiEnabled,
   setAiEnabled,
+  documentTitle,
+  setDocumentTitle,
+  savedDocuments,
+  loadDocument,
+  createNewDocument,
+  deleteDocument,
+  currentDocumentId,
+  onSaveDocument,
+  onLoadDocument,
+  onCreateDocument,
+  onDeleteDocument,
 }: EditorToolbarProps) {
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  const handleTitleClick = () => {
+    setIsEditingTitle(true);
+    // Focus the input after rendering
+    setTimeout(() => titleInputRef.current?.focus(), 0);
+  };
+
+  const handleTitleBlur = () => {
+    setIsEditingTitle(false);
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      setIsEditingTitle(false);
+    }
+  };
+
   return (
     <div className="border-b p-2 flex justify-between items-center">
       <div className="flex items-center gap-2">
         <SidebarTrigger />
         <FileText className="h-5 w-5 text-muted-foreground" />
-        <span className="text-sm font-medium">Untitled Document</span>
+
+        {isEditingTitle ? (
+          <input
+            ref={titleInputRef}
+            type="text"
+            value={documentTitle}
+            onChange={(e) => setDocumentTitle(e.target.value)}
+            onBlur={handleTitleBlur}
+            onKeyDown={handleTitleKeyDown}
+            className="text-sm font-medium bg-transparent border-b border-primary outline-none w-40"
+            autoFocus
+          />
+        ) : (
+          <span
+            className="text-sm font-medium cursor-pointer hover:text-primary"
+            onClick={handleTitleClick}
+          >
+            {documentTitle || "Untitled Document"}
+          </span>
+        )}
+
         <span className="text-xs text-muted-foreground ml-2">
           {savedStatus}
         </span>
@@ -197,6 +272,62 @@ export default function EditorToolbar({
             Commands
           </span>
         </Button>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm">
+              <FileIcon className="h-4 w-4 mr-2" />
+              Documents
+              <ChevronDownIcon className="h-4 w-4 ml-1" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuItem onClick={onCreateDocument}>
+              <PlusIcon className="h-4 w-4 mr-2" />
+              New Document
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {savedDocuments.length > 0 ? (
+              savedDocuments.map((doc) => (
+                <DropdownMenuItem
+                  key={doc.id}
+                  className={`flex justify-between items-center ${
+                    doc.id === currentDocumentId ? "bg-muted" : ""
+                  }`}
+                >
+                  <div
+                    className="flex-1 truncate cursor-pointer"
+                    onClick={() => onLoadDocument(doc.id)}
+                  >
+                    {doc.title || "Untitled"}
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {new Date(doc.lastModified).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (
+                        confirm(
+                          "Are you sure you want to delete this document?"
+                        )
+                      ) {
+                        onDeleteDocument(doc.id);
+                      }
+                    }}
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuItem>
+              ))
+            ) : (
+              <DropdownMenuItem disabled>No saved documents</DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

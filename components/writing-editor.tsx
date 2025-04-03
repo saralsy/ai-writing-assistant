@@ -15,11 +15,41 @@ import {
   enhanceText,
 } from "@/lib/ai-service";
 
-export default function WritingEditor() {
+// Add interface for document type
+interface SavedDocument {
+  id: string;
+  title: string;
+  content: string;
+  lastModified: number;
+}
+
+// Update the props interface
+interface WritingEditorProps {
+  documentId: string;
+  savedDocuments: SavedDocument[];
+  onSaveDocument: (doc: SavedDocument) => void;
+  currentDocument: SavedDocument | undefined;
+  setSavedDocuments: (docs: SavedDocument[]) => void;
+  setDocumentId: (id: string) => void;
+}
+
+export default function WritingEditor({
+  documentId,
+  savedDocuments,
+  onSaveDocument,
+  currentDocument,
+  setSavedDocuments,
+  setDocumentId,
+}: WritingEditorProps) {
   // Document state
-  const [content, setContent] = useState<string>("");
+  const [content, setContent] = useState<string>(
+    currentDocument?.content || ""
+  );
   const [suggestion, setSuggestion] = useState<string>("");
   const [savedStatus, setSavedStatus] = useState("Saved");
+  const [documentTitle, setDocumentTitle] = useState(
+    currentDocument?.title || "Untitled Document"
+  );
 
   // UI state
   const [showCommandPalette, setShowCommandPalette] = useState(false);
@@ -85,16 +115,155 @@ export default function WritingEditor() {
     },
   });
 
+  // Load saved documents on initial render
+  useEffect(() => {
+    loadSavedDocuments();
+
+    // Check if there's a document ID in the URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const docId = urlParams.get("id");
+
+    if (docId) {
+      loadDocument(docId);
+    } else {
+      // Create a new document if none is specified
+      createNewDocument();
+    }
+  }, []);
+
+  // Update when currentDocument changes
+  useEffect(() => {
+    if (currentDocument) {
+      setContent(currentDocument.content || "");
+      setDocumentTitle(currentDocument.title || "Untitled Document");
+    } else {
+      setContent("");
+      setDocumentTitle("Untitled Document");
+    }
+    // Clear any existing suggestions when switching documents
+    setSuggestion("");
+  }, [currentDocument]);
+
   // Auto-save functionality
   useEffect(() => {
-    if (content) {
+    if (content || documentTitle !== "Untitled Document") {
       setSavedStatus("Saving...");
       const saveTimeout = setTimeout(() => {
+        saveDocument();
         setSavedStatus("Saved");
       }, 1000);
       return () => clearTimeout(saveTimeout);
     }
-  }, [content]);
+  }, [content, documentTitle]);
+
+  // Load all saved documents from localStorage
+  const loadSavedDocuments = () => {
+    try {
+      const savedDocs = localStorage.getItem("savedDocuments");
+      if (savedDocs) {
+        setSavedDocuments(JSON.parse(savedDocs));
+      }
+    } catch (error) {
+      console.error("Error loading saved documents:", error);
+    }
+  };
+
+  // Save current document
+  const saveDocument = () => {
+    if (!documentId) return;
+
+    try {
+      // Create the document object
+      const doc: SavedDocument = {
+        id: documentId,
+        title: documentTitle || "Untitled Document",
+        content: content || "",
+        lastModified: Date.now(),
+      };
+
+      // Call the parent's save function
+      onSaveDocument(doc);
+    } catch (error) {
+      console.error("Error saving document:", error);
+      setSavedStatus("Error saving");
+    }
+  };
+
+  // Load a specific document by ID
+  const loadDocument = (id: string) => {
+    try {
+      const doc = savedDocuments.find((doc) => doc.id === id);
+      if (doc) {
+        setDocumentId(doc.id);
+        setDocumentTitle(doc.title);
+        setContent(doc.content);
+        // Reset version history when loading a new document
+        setVersionHistory([]);
+        setCurrentVersion("");
+        // Update URL
+        updateUrlWithDocumentId(id);
+      }
+    } catch (error) {
+      console.error("Error loading document:", error);
+    }
+  };
+
+  // Create a new document - add this to clear suggestions
+  const createNewDocument = () => {
+    // Generate a new ID
+    const newId = Date.now().toString();
+
+    // Create a new document object
+    const newDoc: SavedDocument = {
+      id: newId,
+      title: "Untitled Document",
+      content: "",
+      lastModified: Date.now(),
+    };
+
+    // Update the documents list
+    const updatedDocs = [...savedDocuments, newDoc];
+    setSavedDocuments(updatedDocs);
+    localStorage.setItem("savedDocuments", JSON.stringify(updatedDocs));
+
+    // Set the current document ID
+    setDocumentId(newId);
+
+    // Reset the editor state
+    setContent("");
+    setDocumentTitle("Untitled Document");
+    setSuggestion("");
+
+    // Reset version history
+    setVersionHistory([]);
+    setCurrentVersion("");
+
+    // Update URL
+    updateUrlWithDocumentId(newId);
+  };
+
+  // Delete a document
+  const deleteDocument = (id: string) => {
+    try {
+      const updatedDocs = savedDocuments.filter((doc) => doc.id !== id);
+      setSavedDocuments(updatedDocs);
+      localStorage.setItem("savedDocuments", JSON.stringify(updatedDocs));
+
+      // If the current document was deleted, create a new one
+      if (id === documentId) {
+        createNewDocument();
+      }
+    } catch (error) {
+      console.error("Error deleting document:", error);
+    }
+  };
+
+  // Update URL with document ID for bookmarking/sharing
+  const updateUrlWithDocumentId = (id: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("id", id);
+    window.history.replaceState({}, "", url);
+  };
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -295,11 +464,8 @@ export default function WritingEditor() {
   };
 
   return (
-    <div
-      className="flex flex-col h-screen w-full max-w-full overflow-hidden"
-      style={{ maxWidth: "100%" }}
-    >
-      {/* Top toolbar */}
+    <div className="flex flex-col h-screen w-full max-w-full overflow-hidden">
+      {/* Top toolbar with added document functions */}
       <EditorToolbar
         savedStatus={savedStatus}
         isProcessing={isProcessing}
@@ -334,6 +500,17 @@ export default function WritingEditor() {
         handleEnhanceText={handleEnhanceText}
         aiEnabled={aiEnabled}
         setAiEnabled={setAiEnabled}
+        documentTitle={documentTitle}
+        setDocumentTitle={setDocumentTitle}
+        savedDocuments={savedDocuments}
+        loadDocument={loadDocument}
+        createNewDocument={createNewDocument}
+        deleteDocument={deleteDocument}
+        currentDocumentId={documentId}
+        onSaveDocument={saveDocument}
+        onLoadDocument={loadDocument}
+        onCreateDocument={createNewDocument}
+        onDeleteDocument={deleteDocument}
       />
 
       {/* Main content area */}
