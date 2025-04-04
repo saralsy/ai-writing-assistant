@@ -65,7 +65,8 @@ export default function WritingEditor({
   // AI settings
   const [temperature, setTemperature] = useState(0.7);
   const [writingType, setWritingType] = useState("general");
-  const [customInstructions, setCustomInstructions] = useState("");
+  const [aiModel, setAiModel] = useState<string>("claude-3-sonnet-20240229");
+  const [customInstructions, setCustomInstructions] = useState<string>("");
   const [aiEnabled, setAiEnabled] = useState(true);
   // Appearance settings
   const [backgroundColor, setBackgroundColor] = useState("#ffffff");
@@ -100,13 +101,21 @@ export default function WritingEditor({
     streamProtocol: "text",
     body: {
       temperature: temperature,
+      model: aiModel,
+      customInstructions: customInstructions,
+      writingType: writingType,
     },
     onResponse: (response) => {
       console.log("AI Response:", response);
     },
     onFinish: (result) => {
       console.log("AI Result:", result);
-      setSuggestion(result);
+      // Only set suggestion if result is valid
+      if (result && result.trim() !== "") {
+        setSuggestion(result);
+      } else {
+        console.warn("AI returned empty result, not setting suggestion");
+      }
       setIsProcessing(false);
     },
     onError: (error) => {
@@ -287,13 +296,24 @@ export default function WritingEditor({
 
   // Trigger AI suggestions when typing
   useEffect(() => {
-    if (content && content.length > 20 && !suggestion && !isProcessing) {
-      const lastWord = content.split(" ").pop() || "";
-      if (lastWord.length > 3) {
-        handleGetAISuggestion();
-      }
+    // Only trigger suggestions if AI is enabled and we have enough content
+    if (!aiEnabled || isProcessing || suggestion || !content) {
+      return;
     }
-  }, [content]);
+
+    // Require longer content before triggering suggestions
+    if (content.length > 30) {
+      // Check if user has paused typing
+      const typingTimeout = setTimeout(() => {
+        // Don't get suggestions if we already have one or we're processing
+        if (!suggestion && !isProcessing) {
+          handleGetAISuggestion();
+        }
+      }, 1500); // Wait 1.5 seconds after typing stops
+
+      return () => clearTimeout(typingTimeout);
+    }
+  }, [content, aiEnabled, isProcessing, suggestion]);
 
   const handleGetAISuggestion = async () => {
     setIsProcessing(true);
@@ -305,15 +325,35 @@ export default function WritingEditor({
       // Use the text up to the cursor to generate suggestions
       const contextText = content.substring(0, cursorPos);
 
-      // Send the context to the AI, but request only the new text as a continuation
-      const prompt = `Continue the following text with a suggestion. Return ONLY the new content, not the original text: "${contextText}"`;
+      // Don't send too short content to AI
+      if (contextText.trim().length < 10) {
+        console.log("Context text too short, skipping AI suggestion");
+        setIsProcessing(false);
+        return;
+      }
 
-      // Here we pass the prompt with the adjusted temperature
-      const result = await complete(prompt);
+      console.log("Sending text to AI:", contextText);
 
-      // Only set the suggestion if we got a result
-      if (result) {
+      // Send ONLY the context text without any additional instructions
+      // The instructions should be handled on the server side in the system message
+      const result = await complete(contextText);
+      console.log("Result from AI:", result);
+
+      // Only set the suggestion if we got a result that's different from input
+      if (result && result.trim() !== "" && result !== contextText) {
         setSuggestion(result);
+      } else {
+        console.error("AI returned the same text or empty result", {
+          inputLength: contextText.length,
+          resultLength: result ? result.length : 0,
+          isSame: result === contextText,
+        });
+
+        // If we're not getting useful suggestions, don't try again too soon
+        setTimeout(() => {
+          setIsProcessing(false);
+        }, 2000);
+        return;
       }
     } catch (error) {
       console.error("Error getting AI suggestion:", error);
@@ -511,6 +551,8 @@ export default function WritingEditor({
         onLoadDocument={loadDocument}
         onCreateDocument={createNewDocument}
         onDeleteDocument={deleteDocument}
+        aiModel={aiModel}
+        setAiModel={setAiModel}
       />
 
       {/* Main content area */}

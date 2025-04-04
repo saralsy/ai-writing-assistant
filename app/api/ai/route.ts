@@ -5,65 +5,101 @@ export const maxDuration = 30;
 
 export async function POST(req: Request) {
   try {
-    const { prompt, writingType, temperature } = await req.json();
+    const { prompt, writingType, temperature, model, customInstructions } =
+      await req.json();
+
+    console.log("Model:", model);
 
     if (!prompt) {
       return new Response("Prompt is required", { status: 400 });
     }
 
-    // Format the prompt for continuation
-    const formattedPrompt = preparePromptForContinuation(prompt);
+    console.log("API received prompt:", prompt);
 
-    // Create a stream from Anthropic
+    // handle model
+    let aiModel;
+    switch (model) {
+      case "claude-3-5-sonnet-20240620":
+        aiModel = anthropic("claude-3-5-sonnet-20240620");
+        break;
+      case "claude-3-7-sonnet-20250219":
+        aiModel = anthropic("claude-3-7-sonnet-20250219");
+        break;
+      default:
+        aiModel = anthropic("claude-3-sonnet-20240229");
+        break;
+    }
+
+    // Analyze the end of the prompt
+    const endsWithSpace = prompt.endsWith(" ");
+    const endsWithComma = prompt.endsWith(",");
+    const endsWithPeriod = /[.!?]$/.test(prompt);
+    const endsWithNewline = prompt.endsWith("\n");
+
+    // Set up guidance based on ending
+    let continuationGuidance = "";
+    if (endsWithSpace) {
+      continuationGuidance = "Start with the next word after the space.";
+    } else if (endsWithComma) {
+      continuationGuidance =
+        "Continue after the comma with appropriate phrasing.";
+    } else if (endsWithPeriod) {
+      continuationGuidance = "Begin a new sentence that logically follows.";
+    } else if (endsWithNewline) {
+      continuationGuidance = "Start a new paragraph that follows logically.";
+    } else {
+      continuationGuidance = "Complete the current word or phrase naturally.";
+    }
+
+    // Clear system instructions with stronger language about not repeating
+    const systemPrompt = `You are a helpful writing assistant. Your job is to suggest a NATURAL CONTINUATION of the user's text.
+
+    CRITICAL RULES:
+    1. DO NOT EVER repeat any part of the user's text
+    2. ONLY provide NEW TEXT that would logically come next
+    3. Keep your suggestion relatively short (1-3 sentences max)
+    4. Match the tone, style and formatting of the user's writing
+    5. ${continuationGuidance}
+    6. Writing style: ${writingType || "general"}
+    7. Your response MUST be entirely different from the user's input
+    8. Your response MUST NOT be empty or just whitespace
+    ${
+      customInstructions ? `\nAdditional guidance: ${customInstructions}` : ""
+    }`;
+
+    // Log the system prompt for debugging
+    console.log("System prompt:", systemPrompt);
+
+    // Format the user prompt to make it clearer which part is to be continued
+    const formattedUserPrompt = `The following is a text that needs to be continued:
+        
+    ===BEGIN TEXT===
+    ${prompt}
+    ===END TEXT===
+
+    Provide only the natural continuation of this text. DO NOT repeat any part of the original text.`;
+
+    // Stream the response from Anthropic
     const response = streamText({
-      model: anthropic("claude-3-sonnet-20240229"),
+      model: aiModel,
       messages: [
         {
           role: "system",
-          content: `You are a writing assistant. When asked to continue text, provide only the new suggested text, NOT the original input. Keep suggestions concise and relevant to the context. Maintain consistent formatting with the input text - if the input ends without a space, begin your response without a space; if the input ends with a space, begin your response with the next word. If the input ends with a comma, period, or other punctuation, respect the appropriate spacing that would follow. You are writing in the style of ${writingType}.`,
+          content: systemPrompt,
         },
         {
           role: "user",
-          content: formattedPrompt,
+          content: formattedUserPrompt,
         },
       ],
       temperature: temperature || 0.7,
-      maxTokens: 150,
+      maxTokens: 250,
     });
 
-    // Set the correct headers for text streaming
+    // Ensure we return a Response object
     return response.toTextStreamResponse();
   } catch (error) {
-    console.error("AI API Error:", error);
-    return new Response(
-      JSON.stringify({ error: "Failed to generate AI response" }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    console.error("Error in AI route:", error);
+    return new Response("Error processing your request", { status: 500 });
   }
-}
-
-// Helper function to analyze and prepare the prompt for proper continuation
-function preparePromptForContinuation(prompt: string): string {
-  // This function could add explicit instructions to the prompt
-  // For example: "Continue this text exactly from where it ends: {prompt}"
-  // Or you could add hints about the current formatting
-
-  const endsWithPunctuation = /[,.!?;:]$/.test(prompt);
-  const endsWithSpace = /\s$/.test(prompt);
-
-  let instructions = "Continue this text: ";
-
-  if (endsWithPunctuation && !endsWithSpace) {
-    instructions =
-      "Continue this text (note it ends with punctuation without a space): ";
-  } else if (!endsWithSpace) {
-    instructions = "Continue this text (note it ends without a space): ";
-  } else if (endsWithSpace) {
-    instructions = "Continue this text (note it ends with a space): ";
-  }
-
-  return instructions + prompt;
 }

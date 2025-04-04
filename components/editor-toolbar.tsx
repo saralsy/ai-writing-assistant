@@ -81,6 +81,8 @@ interface EditorToolbarProps {
   onLoadDocument: (id: string) => void;
   onCreateDocument: () => void;
   onDeleteDocument: (id: string) => void;
+  aiModel: string;
+  setAiModel: (model: string) => void;
 }
 
 interface SavedDocument {
@@ -136,6 +138,8 @@ export default function EditorToolbar({
   onLoadDocument,
   onCreateDocument,
   onDeleteDocument,
+  aiModel,
+  setAiModel,
 }: EditorToolbarProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -188,7 +192,12 @@ export default function EditorToolbar({
       </div>
 
       <div className="flex items-center gap-2">
-        <AIStatusIndicator isProcessing={isProcessing} />
+        <AIStatusIndicator
+          isProcessing={isProcessing}
+          aiEnabled={aiEnabled}
+          setAiEnabled={setAiEnabled}
+          aiModel={aiModel}
+        />
 
         <TooltipProvider>
           <Tooltip>
@@ -356,6 +365,10 @@ export default function EditorToolbar({
               setLineSpacingBackground={setLineSpacingBackground}
               lineColor={lineColor}
               setLineColor={setLineColor}
+              aiModel={aiModel}
+              setAiModel={setAiModel}
+              customInstructions={customInstructions}
+              setCustomInstructions={setCustomInstructions}
             />
           </DropdownMenuContent>
         </DropdownMenu>
