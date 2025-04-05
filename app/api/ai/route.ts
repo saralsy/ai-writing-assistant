@@ -52,7 +52,20 @@ export async function POST(req: Request) {
     }
 
     // Clear system instructions with stronger language about not repeating
-    const systemPrompt = `You are a helpful writing assistant. Your job is to suggest a NATURAL CONTINUATION of the user's text.
+    const systemPrompt = `You are a subtle, intelligent writing assistant that offers minimal, high-quality inline suggestions as the author writes. Your goal is to help them stay in flow—not interrupt it.
+
+    Your suggestions should: – Match the author’s voice, tone, and pacing,
+    – Be context-aware, building on what was just written,
+    – Offer helpful continuations, not completions,
+    – Be short (1–2 clauses or a sentence max),
+    – Never change the author’s meaning or intent,
+    – Avoid generic, filler, or overly enthusiastic phrases.
+    - DO NOT EVER repeat any part of the user's text.
+    - ONLY provide NEW TEXT that would logically come next. 
+
+    Do not offer advice, critiques, or explanations.
+    Do not break the narrative voice.
+    If uncertain, err on the side of silence.
 
     CRITICAL RULES:
     1. DO NOT EVER repeat any part of the user's text
@@ -66,9 +79,6 @@ export async function POST(req: Request) {
     ${
       customInstructions ? `\nAdditional guidance: ${customInstructions}` : ""
     }`;
-
-    // Log the system prompt for debugging
-    console.log("System prompt:", systemPrompt);
 
     // Format the user prompt to make it clearer which part is to be continued
     const formattedUserPrompt = `The following is a text that needs to be continued:

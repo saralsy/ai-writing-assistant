@@ -139,13 +139,30 @@ export default function HomePage() {
   // Delete a document
   const deleteDocument = (id: string) => {
     try {
-      const updatedDocs = savedDocuments.filter((doc) => doc.id !== id);
+      // Get the latest documents from localStorage to ensure we're working with fresh data
+      const savedDocsString = localStorage.getItem("savedDocuments");
+      let docsToFilter = savedDocuments;
+
+      if (savedDocsString) {
+        try {
+          docsToFilter = JSON.parse(savedDocsString);
+        } catch (e) {
+          console.error("Error parsing documents from localStorage:", e);
+        }
+      }
+
+      const updatedDocs = docsToFilter.filter((doc) => doc.id !== id);
+
+      // Update both state and localStorage with the filtered documents
       setSavedDocuments(updatedDocs);
       localStorage.setItem("savedDocuments", JSON.stringify(updatedDocs));
 
-      // If the current document was deleted, create a new one
-      if (id === documentId) {
+      // If the current document was deleted and there are no other documents, create a new one
+      if (id === documentId && savedDocuments.length < 1) {
         createNewDocument();
+      } else {
+        // open another existing document
+        loadDocument(savedDocuments[0].id);
       }
     } catch (error) {
       console.error("Error deleting document:", error);

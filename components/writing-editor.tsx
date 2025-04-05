@@ -254,7 +254,21 @@ export default function WritingEditor({
   // Delete a document
   const deleteDocument = (id: string) => {
     try {
-      const updatedDocs = savedDocuments.filter((doc) => doc.id !== id);
+      // Get the latest documents from localStorage to ensure we're working with fresh data
+      const savedDocsString = localStorage.getItem("savedDocuments");
+      let docsToFilter = savedDocuments;
+
+      if (savedDocsString) {
+        try {
+          docsToFilter = JSON.parse(savedDocsString);
+        } catch (e) {
+          console.error("Error parsing documents from localStorage:", e);
+        }
+      }
+
+      const updatedDocs = docsToFilter.filter((doc) => doc.id !== id);
+
+      // Update both state and localStorage with the filtered documents
       setSavedDocuments(updatedDocs);
       localStorage.setItem("savedDocuments", JSON.stringify(updatedDocs));
 

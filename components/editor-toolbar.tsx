@@ -296,7 +296,7 @@ export default function EditorToolbar({
               New Document
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            {savedDocuments.length > 0 ? (
+            {savedDocuments && savedDocuments.length > 0 ? (
               savedDocuments.map((doc) => (
                 <DropdownMenuItem
                   key={doc.id}
