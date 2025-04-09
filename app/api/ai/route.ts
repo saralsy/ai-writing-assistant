@@ -1,5 +1,5 @@
 import { streamText } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
+import { modelOptions } from "@/lib/model-options";
 
 export const maxDuration = 30;
 
@@ -16,19 +16,11 @@ export async function POST(req: Request) {
 
     console.log("API received prompt:", prompt);
 
-    // handle model
-    let aiModel;
-    switch (model) {
-      case "claude-3-5-sonnet-20240620":
-        aiModel = anthropic("claude-3-5-sonnet-20240620");
-        break;
-      case "claude-3-7-sonnet-20250219":
-        aiModel = anthropic("claude-3-7-sonnet-20250219");
-        break;
-      default:
-        aiModel = anthropic("claude-3-sonnet-20240229");
-        break;
-    }
+    // Find the selected model from our options
+    const selectedModel = modelOptions.find((option) => option.value === model);
+
+    // Use the default model (Claude 3 Sonnet) if the selected model is not found
+    const aiClient = selectedModel?.model || modelOptions[1].model;
 
     // Analyze the end of the prompt
     const endsWithSpace = prompt.endsWith(" ");
@@ -54,11 +46,11 @@ export async function POST(req: Request) {
     // Clear system instructions with stronger language about not repeating
     const systemPrompt = `You are a subtle, intelligent writing assistant that offers minimal, high-quality inline suggestions as the author writes. Your goal is to help them stay in flow—not interrupt it.
 
-    Your suggestions should: – Match the author’s voice, tone, and pacing,
+    Your suggestions should: – Match the author's voice, tone, and pacing,
     – Be context-aware, building on what was just written,
     – Offer helpful continuations, not completions,
     – Be short (1–2 clauses or a sentence max),
-    – Never change the author’s meaning or intent,
+    – Never change the author's meaning or intent,
     – Avoid generic, filler, or overly enthusiastic phrases.
     - DO NOT EVER repeat any part of the user's text.
     - ONLY provide NEW TEXT that would logically come next. 
@@ -89,9 +81,9 @@ export async function POST(req: Request) {
 
     Provide only the natural continuation of this text. DO NOT repeat any part of the original text.`;
 
-    // Stream the response from Anthropic
+    // Stream the response from the selected AI model
     const response = streamText({
-      model: aiModel,
+      model: aiClient,
       messages: [
         {
           role: "system",

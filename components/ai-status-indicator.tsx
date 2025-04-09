@@ -1,6 +1,7 @@
 import { Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
+import { modelOptions } from "@/lib/model-options";
 
 interface AIStatusIndicatorProps {
   isProcessing: boolean;
@@ -15,17 +16,22 @@ export default function AIStatusIndicator({
   setAiEnabled,
   aiModel,
 }: AIStatusIndicatorProps) {
-  const getModelName = (model: string) => {
-    switch (model) {
-      case "claude-3-haiku":
-        return "Claude 3 Haiku";
-      case "claude-3-sonnet":
-        return "Claude 3 Sonnet";
-      case "claude-3-opus":
-        return "Claude 3 Opus";
-      default:
-        return "Claude AI";
+  // Get model display name from the modelOptions array
+  const getModelName = (modelValue: string) => {
+    const model = modelOptions.find((option) => option.value === modelValue);
+    if (model) {
+      // Extract just the main part of the model name for the status indicator
+      // This makes it more compact for the UI
+      const nameParts = model.label.split(" ");
+      // For models like "Claude 3 Sonnet", return "Claude 3 Sonnet"
+      // For models like "GPT-4o", return "GPT-4o"
+      return model.label.includes("Claude") || model.label.includes("Gemini")
+        ? `${nameParts[0]} ${nameParts[1]}${
+            nameParts[2] ? " " + nameParts[2] : ""
+          }`
+        : model.label;
     }
+    return "Claude AI";
   };
 
   return (

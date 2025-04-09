@@ -106,10 +106,10 @@ export default function WritingEditor({
       writingType: writingType,
     },
     onResponse: (response) => {
-      console.log("AI Response:", response);
+      // console.log("AI Response:", response);
     },
     onFinish: (result) => {
-      console.log("AI Result:", result);
+      // console.log("AI Result:", result);
       // Only set suggestion if result is valid
       if (result && result.trim() !== "") {
         setSuggestion(result);
