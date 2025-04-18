@@ -4,4 +4,5 @@ export interface Draft {
   content: string;
   createdAt: string;
   updatedAt: string;
+  userId: string | null;
 }

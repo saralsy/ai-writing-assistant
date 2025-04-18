@@ -37,6 +37,8 @@ import { getAllDrafts, deleteDraft, saveDraft } from "@/lib/storage";
 import type { Draft } from "@/lib/types";
 import { formatDistanceToNow } from "@/lib/utils";
 import DocumentList from "./document-list";
+import { AuthSidebar } from "./auth-sidebar";
+import { useSession } from "next-auth/react";
 
 interface SavedDocument {
   id: string;
@@ -73,13 +75,14 @@ export function DraftSidebar({
     "newest" | "oldest" | "alphabetical"
   >("newest");
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { data: session } = useSession();
 
   useEffect(() => {
     loadDrafts();
-  }, []);
+  }, [session]);
 
-  const loadDrafts = () => {
-    const allDrafts = getAllDrafts();
+  const loadDrafts = async () => {
+    const allDrafts = await getAllDrafts();
     setDrafts(allDrafts);
   };
 
@@ -90,6 +93,7 @@ export function DraftSidebar({
       content: "",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      userId: session?.user?.email || null,
     };
 
     // Save the new draft to storage first
@@ -168,6 +172,9 @@ export function DraftSidebar({
         </div>
       </SidebarHeader>
       <SidebarContent>
+        {/* Authentication Section */}
+        <AuthSidebar />
+
         <div className="flex-1 overflow-hidden">
           <DocumentList
             documents={savedDocuments}
