@@ -14,6 +14,9 @@ import {
   executeAICommand,
   enhanceText,
 } from "@/lib/ai-service";
+import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
+import { modelOptions } from "@/lib/model-options";
 
 // Add interface for document type
 interface SavedDocument {
@@ -65,7 +68,7 @@ export default function WritingEditor({
   // AI settings
   const [temperature, setTemperature] = useState(0.7);
   const [writingType, setWritingType] = useState("general");
-  const [aiModel, setAiModel] = useState<string>("claude-3-sonnet-20240229");
+  const [aiModel, setAiModel] = useState<string>("claude-3-sonnet");
   const [customInstructions, setCustomInstructions] = useState<string>("");
   const [aiEnabled, setAiEnabled] = useState(true);
   // Appearance settings
@@ -94,6 +97,63 @@ export default function WritingEditor({
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const { theme } = useTheme();
+  const { toast } = useToast();
+  const [currentModel, setCurrentModel] = useState("claude-3-sonnet");
+  const [modelReturnedSameResult, setModelReturnedSameResult] = useState(false);
+  const [failedModels, setFailedModels] = useState<Set<string>>(new Set());
+
+  // Available AI models to cycle through - using values from modelOptions
+  const availableModels = modelOptions.map((model) => model.value);
+
+  // Get next available model that hasn't failed
+  const getNextAvailableModel = (currentModel: string): string => {
+    // Make sure currentModel is valid
+    if (!currentModel || !availableModels.includes(currentModel)) {
+      console.warn(
+        `Invalid current model: "${currentModel}". Defaulting to first available model.`
+      );
+      return availableModels[0];
+    }
+
+    // Create a copy of the failed models set to work with
+    const failedModelsCopy = new Set(failedModels);
+
+    // Add the current model to failed models
+    failedModelsCopy.add(currentModel);
+
+    // Find models that haven't failed yet
+    const availableOptions = availableModels.filter(
+      (model) => !failedModelsCopy.has(model)
+    );
+
+    if (availableOptions.length === 0) {
+      // If all models have failed, reset and start over with the first model
+      setFailedModels(new Set());
+      console.log("All models have been tried. Resetting failed models list.");
+      return availableModels[0];
+    }
+
+    // Get the next model in the list
+    const currentIndex = availableModels.indexOf(currentModel);
+
+    // Loop through models starting from the next one
+    for (let i = 1; i < availableModels.length; i++) {
+      const nextIndex = (currentIndex + i) % availableModels.length;
+      const nextModel = availableModels[nextIndex];
+
+      if (!failedModelsCopy.has(nextModel)) {
+        return nextModel;
+      }
+    }
+
+    // Fallback to first available model if nothing else is found
+    return availableOptions[0] || availableModels[0]; // Double safety check
+  };
+
+  // Reset failed models when the document changes
+  useEffect(() => {
+    setFailedModels(new Set());
+  }, [documentId]);
 
   // AI completion hook
   const { complete, isLoading } = useCompletion({
@@ -123,6 +183,26 @@ export default function WritingEditor({
       setIsProcessing(false);
     },
   });
+
+  // Initialize aiModel with a valid value on first render
+  useEffect(() => {
+    // Make sure aiModel starts with a valid value
+    if (!aiModel || !availableModels.includes(aiModel)) {
+      console.log("Setting default model:", availableModels[0]);
+      setAiModel(availableModels[0]);
+    }
+  }, []);
+
+  // Keep currentModel in sync with aiModel
+  useEffect(() => {
+    // Ensure aiModel is valid before syncing
+    if (aiModel && availableModels.includes(aiModel)) {
+      setCurrentModel(aiModel);
+    } else if (aiModel) {
+      console.warn(`Invalid model "${aiModel}" detected, reverting to default`);
+      setAiModel(availableModels[0]);
+    }
+  }, [aiModel]);
 
   // Load saved documents on initial render
   useEffect(() => {
@@ -311,7 +391,13 @@ export default function WritingEditor({
   // Trigger AI suggestions when typing
   useEffect(() => {
     // Only trigger suggestions if AI is enabled and we have enough content
-    if (!aiEnabled || isProcessing || suggestion || !content) {
+    if (
+      !aiEnabled ||
+      isProcessing ||
+      suggestion ||
+      !content ||
+      modelReturnedSameResult
+    ) {
       return;
     }
 
@@ -327,7 +413,7 @@ export default function WritingEditor({
 
       return () => clearTimeout(typingTimeout);
     }
-  }, [content, aiEnabled, isProcessing, suggestion]);
+  }, [content, aiEnabled, isProcessing, suggestion, modelReturnedSameResult]);
 
   const handleGetAISuggestion = async () => {
     setIsProcessing(true);
@@ -346,7 +432,17 @@ export default function WritingEditor({
         return;
       }
 
-      console.log("Sending text to AI:", contextText);
+      // Ensure we're using a valid model
+      if (!aiModel || !availableModels.includes(aiModel)) {
+        console.warn(
+          `Invalid model detected: "${aiModel}", reverting to default model`
+        );
+        setAiModel(availableModels[0]);
+        setIsProcessing(false);
+        return;
+      }
+
+      console.log(`Sending text to AI using model: ${aiModel}`);
 
       // Send ONLY the context text without any additional instructions
       // The instructions should be handled on the server side in the system message
@@ -356,21 +452,151 @@ export default function WritingEditor({
       // Only set the suggestion if we got a result that's different from input
       if (result && result.trim() !== "" && result !== contextText) {
         setSuggestion(result);
+        // Reset the flag when we get a good response
+        setModelReturnedSameResult(false);
       } else {
+        if (!result || result === contextText) {
+          // Add current model to failed models set
+          setFailedModels((prevFailedModels) => {
+            const newFailedModels = new Set(prevFailedModels);
+            newFailedModels.add(aiModel);
+            return newFailedModels;
+          });
+
+          // Set flag to prevent retrying with same model
+          setModelReturnedSameResult(true);
+
+          console.log("Showing toast for AI model result issue:", {
+            model: aiModel,
+            resultLength: result ? result.length : 0,
+            isSame: result === contextText,
+            failedModels: Array.from(failedModels),
+          });
+
+          // Get next available model that hasn't failed
+          const nextModel = getNextAvailableModel(aiModel);
+
+          // Safety check to ensure nextModel is valid
+          if (!nextModel || !availableModels.includes(nextModel)) {
+            console.error(
+              `Invalid next model: "${nextModel}". Falling back to first model.`
+            );
+            const fallbackModel = availableModels[0];
+
+            // Function to switch models with safety check
+            const safeSwitch = (modelToUse: string) => {
+              console.log(`Switching to model: ${modelToUse}`);
+
+              // Get friendly model name
+              const modelOption = modelOptions.find(
+                (m) => m.value === modelToUse
+              );
+              const modelLabel = modelOption?.label || modelToUse;
+
+              setAiModel(modelToUse);
+              setCurrentModel(modelToUse);
+              setModelReturnedSameResult(false);
+
+              toast({
+                title: "Model switched",
+                description: `Now using ${modelLabel}. Suggestions will resume automatically.`,
+              });
+            };
+
+            // Switch to fallback model
+            safeSwitch(fallbackModel);
+            return;
+          }
+
+          // Function to switch models
+          const switchToNextModel = () => {
+            console.log(
+              `Automatically switching from ${aiModel} to ${nextModel}`
+            );
+
+            // Find model labels for better display
+            const currentModelOption = modelOptions.find(
+              (m) => m.value === aiModel
+            );
+            const nextModelOption = modelOptions.find(
+              (m) => m.value === nextModel
+            );
+
+            const currentModelLabel = currentModelOption?.label || aiModel;
+            const nextModelLabel = nextModelOption?.label || nextModel;
+
+            // Switch to the next available model
+            setAiModel(nextModel);
+            setCurrentModel(nextModel);
+            // Reset the flag when model is changed
+            setModelReturnedSameResult(false);
+
+            toast({
+              title: "Model automatically switched",
+              description: `Switched from ${currentModelLabel} to ${nextModelLabel}. Suggestions will resume automatically.`,
+            });
+          };
+
+          // Set a timer to auto-switch models after 8 seconds if user doesn't click
+          const autoSwitchTimer = setTimeout(switchToNextModel, 8000);
+
+          // Find friendly model names for toast
+          const currentModelOption = modelOptions.find(
+            (m) => m.value === aiModel
+          );
+          const nextModelOption = modelOptions.find(
+            (m) => m.value === nextModel
+          );
+
+          const currentModelLabel = currentModelOption?.label || aiModel;
+          const nextModelLabel = nextModelOption?.label || nextModel;
+
+          toast({
+            title: "AI couldn't generate a useful suggestion",
+            description: `${currentModelLabel} returned the same text or an empty result. Will automatically switch to ${nextModelLabel} in 8 seconds.`,
+            variant: "destructive",
+            action: (
+              <ToastAction
+                altText="Switch Model Now"
+                onClick={() => {
+                  console.log(
+                    "Toast action clicked - switching model immediately"
+                  );
+                  // Clear the auto-switch timer
+                  clearTimeout(autoSwitchTimer);
+
+                  // Switch to the next available model
+                  setAiModel(nextModel);
+                  setCurrentModel(nextModel);
+                  // Reset the flag when model is changed
+                  setModelReturnedSameResult(false);
+
+                  toast({
+                    title: "Model switched",
+                    description: `Switched to ${nextModelLabel}. Suggestions will resume automatically.`,
+                  });
+                }}
+              >
+                Switch Now
+              </ToastAction>
+            ),
+          });
+        }
+        setIsProcessing(false);
+        setSuggestion("");
+
         console.error("AI returned the same text or empty result", {
           inputLength: contextText.length,
           resultLength: result ? result.length : 0,
           isSame: result === contextText,
+          failedModels: Array.from(failedModels),
         });
 
-        // If we're not getting useful suggestions, don't try again too soon
-        setTimeout(() => {
-          setIsProcessing(false);
-        }, 2000);
         return;
       }
     } catch (error) {
       console.error("Error getting AI suggestion:", error);
+      setModelReturnedSameResult(false); // Reset on error to allow retrying
     } finally {
       setIsProcessing(false);
     }
@@ -517,6 +743,23 @@ export default function WritingEditor({
     setShowVersionCompare(true);
   };
 
+  const [showModelSelector, setShowModelSelector] = useState(false);
+
+  // Add effect to reset the flag when the model changes
+  useEffect(() => {
+    // Reset the flag when AI model is changed
+    setModelReturnedSameResult(false);
+  }, [aiModel]);
+
+  // Function to reset the failed models list
+  const resetFailedModels = () => {
+    setFailedModels(new Set());
+    toast({
+      title: "Failed models reset",
+      description: "All models are now available for suggestions again.",
+    });
+  };
+
   return (
     <div className="flex flex-col h-screen w-full max-w-full overflow-hidden">
       {/* Top toolbar with added document functions */}
@@ -566,7 +809,24 @@ export default function WritingEditor({
         onCreateDocument={createNewDocument}
         onDeleteDocument={deleteDocument}
         aiModel={aiModel}
-        setAiModel={setAiModel}
+        setAiModel={(newModel) => {
+          // Validate model before setting
+          if (newModel && availableModels.includes(newModel)) {
+            setAiModel(newModel);
+            setCurrentModel(newModel);
+            setModelReturnedSameResult(false); // Reset flag when user manually changes model
+            // Reset failed models when user manually changes model
+            setFailedModels(new Set());
+          } else {
+            console.warn(`Attempted to set invalid model: "${newModel}"`);
+            toast({
+              title: "Invalid model selected",
+              description: `"${newModel}" is not available. Using default model instead.`,
+              variant: "destructive",
+            });
+            setAiModel(availableModels[0]);
+          }
+        }}
       />
 
       {/* Main content area */}
