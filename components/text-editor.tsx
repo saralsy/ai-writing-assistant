@@ -557,35 +557,6 @@ export default function TextEditor({
                 editorRef={editorRef}
               />
             )}
-
-            {/* Alternate button to show toolbar */}
-            {hasSelection && aiEnabled && !isEnhancing && !isProcessing && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="fixed z-[100] px-2.5 py-1 h-7 flex items-center gap-1 shadow-md rounded-full bg-background/90 backdrop-blur-sm border animate-fade-in"
-                style={{
-                  top: `${selectionButtonPosition.top}px`,
-                  left: `${selectionButtonPosition.left}px`,
-                }}
-                onClick={forceShowToolbar}
-              >
-                <WandSparkles className="h-3 w-3 text-primary" />
-                <span className="text-xs font-medium">AI Actions</span>
-              </Button>
-            )}
-
-            {/* Debug indicator for selection - only show in development */}
-            {process.env.NODE_ENV === "development" && hasSelection && (
-              <div className="fixed top-4 left-4 bg-red-500 text-white px-3 py-1 rounded-full text-xs z-[200]">
-                Text Selected:{" "}
-                {selectionRange
-                  ? content
-                      .substring(selectionRange.start, selectionRange.end)
-                      .slice(0, 20) + "..."
-                  : ""}
-              </div>
-            )}
           </div>
         </div>
       </div>

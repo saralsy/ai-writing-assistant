@@ -249,38 +249,61 @@ export default function EditorToolbar({
           onCustomInstructionsChange={setCustomInstructions}
         />
 
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowOutline(!showOutline)}
-          className={cn(showOutline && "bg-accent")}
-        >
-          <FileText className="h-4 w-4 mr-1" />
-          <span className="sr-only md:not-sr-only md:inline-block">
-            Outline
-          </span>
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowOutline(!showOutline)}
+                className={cn(showOutline && "bg-accent")}
+              >
+                <FileText className="h-4 w-4 mr-1" />
+                <span className="sr-only md:not-sr-only md:inline-block">
+                  Outline
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Toggle document outline</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setSplitScreen(!splitScreen)}
-          className={cn(splitScreen && "bg-accent")}
-        >
-          <Split className="h-4 w-4 mr-1" />
-          <span className="sr-only md:not-sr-only md:inline-block">Split</span>
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSplitScreen(!splitScreen)}
+                className={cn(splitScreen && "bg-accent")}
+              >
+                <Split className="h-4 w-4 mr-1" />
+                <span className="sr-only md:not-sr-only md:inline-block">
+                  Split
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Toggle split screen mode</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowCommandPalette(true)}
-        >
-          <Command className="h-4 w-4 mr-1" />
-          <span className="sr-only md:not-sr-only md:inline-block">
-            Commands
-          </span>
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCommandPalette(true)}
+              >
+                <Command className="h-4 w-4 mr-1" />
+                <span className="sr-only md:not-sr-only md:inline-block">
+                  Commands
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Open command palette</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -313,23 +336,32 @@ export default function EditorToolbar({
                       {new Date(doc.lastModified).toLocaleDateString()}
                     </span>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (
-                        confirm(
-                          "Are you sure you want to delete this document?"
-                        )
-                      ) {
-                        onDeleteDocument(doc.id);
-                      }
-                    }}
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </Button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (
+                              confirm(
+                                "Are you sure you want to delete this document?"
+                              )
+                            ) {
+                              onDeleteDocument(doc.id);
+                            }
+                          }}
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left">
+                        Delete document
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </DropdownMenuItem>
               ))
             ) : (
