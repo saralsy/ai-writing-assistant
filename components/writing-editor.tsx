@@ -17,6 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { modelOptions } from "@/lib/model-options";
+import { InlineAIIndicator } from "./inline-ai-indicator";
 
 // Add interface for document type
 interface SavedDocument {
@@ -53,6 +54,7 @@ export default function WritingEditor({
   const [documentTitle, setDocumentTitle] = useState(
     currentDocument?.title || "Untitled Document"
   );
+  const [cursorPosition, setCursorPosition] = useState<number | null>(null);
 
   // UI state
   const [showCommandPalette, setShowCommandPalette] = useState(false);
@@ -101,6 +103,14 @@ export default function WritingEditor({
   const [currentModel, setCurrentModel] = useState("claude-3-sonnet");
   const [modelReturnedSameResult, setModelReturnedSameResult] = useState(false);
   const [failedModels, setFailedModels] = useState<Set<string>>(new Set());
+
+  // Track text selection processing
+  const [selectionProcessing, setSelectionProcessing] = useState(false);
+  const [selectionAction, setSelectionAction] = useState<string>("");
+  const [selectionPosition, setSelectionPosition] = useState({
+    top: 0,
+    left: 0,
+  });
 
   // Available AI models to cycle through - using values from modelOptions
   const availableModels = modelOptions.map((model) => model.value);
@@ -225,9 +235,12 @@ export default function WritingEditor({
     if (currentDocument) {
       setContent(currentDocument.content || "");
       setDocumentTitle(currentDocument.title || "Untitled Document");
+      // Set cursor position to the end of content
+      setCursorPosition((currentDocument.content || "").length);
     } else {
       setContent("");
       setDocumentTitle("Untitled Document");
+      setCursorPosition(0);
     }
     // Clear any existing suggestions when switching documents
     setSuggestion("");
@@ -401,6 +414,11 @@ export default function WritingEditor({
       return;
     }
 
+    // Only get suggestions if cursor is at the end of the text
+    if (cursorPosition !== content.length) {
+      return;
+    }
+
     // Require longer content before triggering suggestions
     if (content.length > 30) {
       // Check if user has paused typing
@@ -413,14 +431,28 @@ export default function WritingEditor({
 
       return () => clearTimeout(typingTimeout);
     }
-  }, [content, aiEnabled, isProcessing, suggestion, modelReturnedSameResult]);
+  }, [
+    content,
+    aiEnabled,
+    isProcessing,
+    suggestion,
+    modelReturnedSameResult,
+    cursorPosition,
+  ]);
 
   const handleGetAISuggestion = async () => {
     setIsProcessing(true);
 
     try {
-      // Get cursor position
-      let cursorPos = editorRef.current?.selectionStart || content.length;
+      // Use cursor position from state
+      let cursorPos = cursorPosition !== null ? cursorPosition : content.length;
+
+      // Only get suggestions if cursor is at the end of the text
+      if (cursorPos !== content.length) {
+        console.log("Cursor not at end of text, skipping AI suggestion");
+        setIsProcessing(false);
+        return;
+      }
 
       // Use the text up to the cursor to generate suggestions
       const contextText = content.substring(0, cursorPos);
@@ -605,7 +637,8 @@ export default function WritingEditor({
   const acceptSuggestion = () => {
     if (suggestion) {
       // Get cursor position
-      const cursorPos = editorRef.current?.selectionStart || content.length;
+      const cursorPos =
+        cursorPosition !== null ? cursorPosition : content.length;
 
       // Insert the suggestion at cursor position
       const newContent =
@@ -616,10 +649,13 @@ export default function WritingEditor({
       setContent(newContent);
       setSuggestion("");
 
+      // Update cursor position to after the inserted suggestion
+      const newCursorPos = cursorPos + suggestion.length;
+      setCursorPosition(newCursorPos);
+
       // Optional: Set cursor position after the inserted suggestion
       setTimeout(() => {
         if (editorRef.current) {
-          const newCursorPos = cursorPos + suggestion.length;
           editorRef.current.selectionStart = newCursorPos;
           editorRef.current.selectionEnd = newCursorPos;
           editorRef.current.focus();
@@ -671,6 +707,17 @@ export default function WritingEditor({
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setContent(e.target.value);
     setSuggestion("");
+    setCursorPosition(e.target.selectionStart);
+  };
+
+  // Function to track cursor movement
+  const handleCursorChange = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    setCursorPosition(e.currentTarget.selectionStart);
+
+    // If cursor is not at the end, clear any existing suggestion
+    if (e.currentTarget.selectionStart !== content.length && suggestion) {
+      setSuggestion("");
+    }
   };
 
   // Save current version to history
@@ -759,6 +806,365 @@ export default function WritingEditor({
       description: "All models are now available for suggestions again.",
     });
   };
+
+  // Function to expand selected text using AI
+  const handleExpandSelection = async (
+    selectedText: string,
+    selectionStart: number,
+    selectionEnd: number
+  ) => {
+    if (!selectedText.trim() || !aiEnabled) return;
+
+    setIsProcessing(true);
+    setSelectionProcessing(true);
+    setSelectionAction("expanding");
+
+    // Calculate the position for the indicator
+    const textarea = document.querySelector("textarea");
+    if (textarea) {
+      const textBeforeSelection = content.substring(0, selectionStart);
+      const lines = textBeforeSelection.split("\n");
+      const lineNumber = lines.length;
+
+      // Rough approximation for position, adjust as needed
+      const rect = textarea.getBoundingClientRect();
+      const lineHeight = fontSize * lineSpacing;
+      const top = rect.top + lineNumber * lineHeight;
+      const left = rect.left + 100; // Position it a bit to the right
+
+      setSelectionPosition({ top, left });
+    }
+
+    try {
+      // Get the model to use
+      if (!aiModel || !availableModels.includes(aiModel)) {
+        setAiModel(availableModels[0]);
+      }
+
+      // Find friendly model name for toast
+      const modelOption = modelOptions.find((m) => m.value === aiModel);
+      const modelLabel = modelOption?.label || aiModel;
+
+      toast({
+        title: "Expanding selection",
+        description: `Using ${modelLabel} to expand your selected text...`,
+      });
+
+      // Get context before and after the selection
+      const contextBefore = content.substring(
+        Math.max(0, selectionStart - 200),
+        selectionStart
+      );
+      const contextAfter = content.substring(
+        selectionEnd,
+        Math.min(content.length, selectionEnd + 200)
+      );
+
+      // Send a request to expand the selected text with context
+      const prompt = `I'll provide you with text that has a specific section that needs to be expanded. 
+      
+CONTEXT BEFORE SELECTED SECTION:
+"""
+${contextBefore}
+"""
+
+SELECTED SECTION TO EXPAND:
+"""
+${selectedText}
+"""
+
+CONTEXT AFTER SELECTED SECTION:
+"""
+${contextAfter}
+"""
+
+Please expand ONLY the SELECTED SECTION, adding more details, examples, or explanation. Keep your writing style, tone, and voice consistent with the surrounding context. The expanded content should flow naturally with the text before and after it. Focus on elaborating the ideas in the selected section without changing its original meaning.`;
+
+      // Get expansion from AI
+      const expandedText = await complete(prompt);
+
+      if (expandedText && expandedText.trim()) {
+        // Insert the expanded text at the selection position
+        const newContent =
+          content.substring(0, selectionStart) +
+          expandedText +
+          content.substring(selectionEnd);
+
+        setContent(newContent);
+
+        toast({
+          title: "Text expanded",
+          description: "AI has expanded your selected text.",
+        });
+      } else {
+        toast({
+          title: "Could not expand text",
+          description:
+            "The AI couldn't generate a meaningful expansion. Please try again or select different text.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error expanding text:", error);
+      toast({
+        title: "Error expanding text",
+        description:
+          "There was an error when trying to expand your text. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+      setSelectionProcessing(false);
+    }
+  };
+
+  // Function to rewrite selected text using AI
+  const handleRewriteSelection = async (
+    selectedText: string,
+    selectionStart: number,
+    selectionEnd: number
+  ) => {
+    if (!selectedText.trim() || !aiEnabled) return;
+
+    setIsProcessing(true);
+    setSelectionProcessing(true);
+    setSelectionAction("rewriting");
+
+    // Calculate position for indicator
+    const textarea = document.querySelector("textarea");
+    if (textarea) {
+      const textBeforeSelection = content.substring(0, selectionStart);
+      const lines = textBeforeSelection.split("\n");
+      const lineNumber = lines.length;
+
+      const rect = textarea.getBoundingClientRect();
+      const lineHeight = fontSize * lineSpacing;
+      const top = rect.top + lineNumber * lineHeight;
+      const left = rect.left + 100;
+
+      setSelectionPosition({ top, left });
+    }
+
+    try {
+      // Check if we have a valid model
+      if (!aiModel || !availableModels.includes(aiModel)) {
+        setAiModel(availableModels[0]);
+      }
+
+      // Find friendly model name for toast
+      const modelOption = modelOptions.find((m) => m.value === aiModel);
+      const modelLabel = modelOption?.label || aiModel;
+
+      toast({
+        title: "Rewriting selection",
+        description: `Using ${modelLabel} to rewrite your selected text...`,
+      });
+
+      // Get context before and after the selection
+      const contextBefore = content.substring(
+        Math.max(0, selectionStart - 200),
+        selectionStart
+      );
+      const contextAfter = content.substring(
+        selectionEnd,
+        Math.min(content.length, selectionEnd + 200)
+      );
+
+      // Send a request to rewrite the selected text with context awareness
+      const prompt = `I'll provide you with text that has a specific section that needs to be rewritten. 
+      
+CONTEXT BEFORE SELECTED SECTION:
+"""
+${contextBefore}
+"""
+
+SELECTED SECTION TO REWRITE:
+"""
+${selectedText}
+"""
+
+CONTEXT AFTER SELECTED SECTION:
+"""
+${contextAfter}
+"""
+
+Please rewrite ONLY the SELECTED SECTION in a different way, while keeping the same meaning. Your rewrite should:
+1. Maintain the same tone, style, and level of formality as the surrounding context
+2. Use different words and phrasing
+3. Ensure the rewritten text flows naturally with the content before and after it
+4. Keep the same key information and meaning as the original selected section
+
+Provide only the rewritten text, without any explanations or notes.`;
+
+      // Get rewrite from AI
+      const rewrittenText = await complete(prompt);
+
+      if (rewrittenText && rewrittenText.trim()) {
+        // Replace the selected text with the rewritten version
+        const newContent =
+          content.substring(0, selectionStart) +
+          rewrittenText +
+          content.substring(selectionEnd);
+
+        setContent(newContent);
+
+        toast({
+          title: "Text rewritten",
+          description: "AI has rewritten your selected text.",
+        });
+      } else {
+        toast({
+          title: "Could not rewrite text",
+          description:
+            "The AI couldn't generate a good rewrite. Please try again or select different text.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error rewriting text:", error);
+      toast({
+        title: "Error rewriting text",
+        description:
+          "There was an error when trying to rewrite your text. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+      setSelectionProcessing(false);
+    }
+  };
+
+  // Function to improve selected text's writing quality
+  const handleImproveSelection = async (
+    selectedText: string,
+    selectionStart: number,
+    selectionEnd: number
+  ) => {
+    if (!selectedText.trim() || !aiEnabled) return;
+
+    setIsProcessing(true);
+    setSelectionProcessing(true);
+    setSelectionAction("improving");
+
+    // Calculate position for indicator
+    const textarea = document.querySelector("textarea");
+    if (textarea) {
+      const textBeforeSelection = content.substring(0, selectionStart);
+      const lines = textBeforeSelection.split("\n");
+      const lineNumber = lines.length;
+
+      const rect = textarea.getBoundingClientRect();
+      const lineHeight = fontSize * lineSpacing;
+      const top = rect.top + lineNumber * lineHeight;
+      const left = rect.left + 100;
+
+      setSelectionPosition({ top, left });
+    }
+
+    try {
+      // Check if we have a valid model
+      if (!aiModel || !availableModels.includes(aiModel)) {
+        setAiModel(availableModels[0]);
+      }
+
+      // Find friendly model name for toast
+      const modelOption = modelOptions.find((m) => m.value === aiModel);
+      const modelLabel = modelOption?.label || aiModel;
+
+      toast({
+        title: "Improving writing",
+        description: `Using ${modelLabel} to improve your selected text...`,
+      });
+
+      // Get context before and after the selection
+      const contextBefore = content.substring(
+        Math.max(0, selectionStart - 200),
+        selectionStart
+      );
+      const contextAfter = content.substring(
+        selectionEnd,
+        Math.min(content.length, selectionEnd + 200)
+      );
+
+      // Send a request to improve the selected text with context awareness
+      const prompt = `I'll provide you with text that has a specific section that needs to be improved. 
+      
+CONTEXT BEFORE SELECTED SECTION:
+"""
+${contextBefore}
+"""
+
+SELECTED SECTION TO IMPROVE:
+"""
+${selectedText}
+"""
+
+CONTEXT AFTER SELECTED SECTION:
+"""
+${contextAfter}
+"""
+
+Please improve ONLY the SELECTED SECTION by enhancing its clarity, flow, and overall quality. Your improved version should:
+1. Fix any grammar, spelling, or punctuation issues
+2. Improve clarity and readability
+3. Enhance the flow and style while keeping the original meaning
+4. Match the tone and voice of the surrounding context
+5. Ensure the improved text transitions smoothly with the content before and after it
+
+Provide only the improved text, without any explanations or notes.`;
+
+      // Get improved text from AI
+      const improvedText = await complete(prompt);
+
+      if (improvedText && improvedText.trim()) {
+        // Replace the selected text with the improved version
+        const newContent =
+          content.substring(0, selectionStart) +
+          improvedText +
+          content.substring(selectionEnd);
+
+        setContent(newContent);
+
+        toast({
+          title: "Writing improved",
+          description: "AI has improved your selected text.",
+        });
+      } else {
+        toast({
+          title: "Could not improve text",
+          description:
+            "The AI couldn't generate improvements. Please try again or select different text.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error improving text:", error);
+      toast({
+        title: "Error improving text",
+        description:
+          "There was an error when trying to improve your text. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+      setSelectionProcessing(false);
+    }
+  };
+
+  // Listen for custom events to clear suggestions
+  useEffect(() => {
+    const handleClearSuggestion = () => {
+      if (suggestion) {
+        setSuggestion("");
+      }
+    };
+
+    document.addEventListener("clearSuggestion", handleClearSuggestion);
+
+    return () => {
+      document.removeEventListener("clearSuggestion", handleClearSuggestion);
+    };
+  }, [suggestion]);
 
   return (
     <div className="flex flex-col h-screen w-full max-w-full overflow-hidden">
@@ -858,10 +1264,14 @@ export default function WritingEditor({
             lineSpacing_background={lineSpacing_background}
             lineColor={lineColor}
             handleContentChange={handleContentChange}
+            handleCursorChange={handleCursorChange}
             isEnhancing={isEnhancing}
             applyVersion={applyVersion}
             compareWithCurrentVersion={compareWithCurrentVersion}
             aiEnabled={aiEnabled}
+            onExpandSelection={handleExpandSelection}
+            onRewriteSelection={handleRewriteSelection}
+            onImproveSelection={handleImproveSelection}
           />
 
           {/* Split screen reference panel */}
@@ -892,6 +1302,14 @@ export default function WritingEditor({
         <CommandPalette
           onClose={() => setShowCommandPalette(false)}
           onCommand={handleCommand}
+        />
+      )}
+
+      {/* Inline AI processing indicator */}
+      {selectionProcessing && (
+        <InlineAIIndicator
+          position={selectionPosition}
+          action={selectionAction}
         />
       )}
     </div>
